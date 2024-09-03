@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
     Number(usize),
     Label(String),
@@ -52,7 +52,7 @@ impl<'a> Lexer<'a> {
 
             self.start = self.pos;
         }
-        
+
         self.add_token(Token::NewLine);
 
         Ok(self.tokens)
@@ -76,7 +76,8 @@ impl<'a> Lexer<'a> {
     }
 
     fn consume_while<F>(&mut self, condition: F)
-        where F: Fn(&char) -> bool
+    where
+        F: Fn(&char) -> bool,
     {
         while let Some(ch) = self.peek() {
             if condition(ch) {
@@ -132,7 +133,7 @@ fn map_kw(word: &str) -> Option<Token> {
         "brp" => Some(Token::BranchPositive),
         "bra" => Some(Token::BranchAlways),
         "dat" => Some(Token::Data),
-        _ => None
+        _ => None,
     }
 }
 
@@ -186,6 +187,21 @@ mod tests {
         assert_eq!(single("test_label:"), Token::LabelDef("test_label".into()));
         assert_eq!(single("HasCaps"), Token::Label("HasCaps".into()));
         assert_eq!(single("HasNums123"), Token::Label("HasNums123".into()));
+    }
+
+    #[test]
+    fn no_kw_as_labeldef() {
+        assert!(tokenize("lda:").is_err());
+        assert!(tokenize("sto:").is_err());
+        assert!(tokenize("add:").is_err());
+        assert!(tokenize("sub:").is_err());
+        assert!(tokenize("inp:").is_err());
+        assert!(tokenize("out:").is_err());
+        assert!(tokenize("hlt:").is_err());
+        assert!(tokenize("brz:").is_err());
+        assert!(tokenize("brp:").is_err());
+        assert!(tokenize("bra:").is_err());
+        assert!(tokenize("dat:").is_err());
     }
 
     #[test]
