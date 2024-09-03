@@ -17,6 +17,7 @@ pub enum Token {
     BranchPositive,
     BranchAlways,
     Data,
+    NewLine,
     Eof,
 }
 
@@ -51,6 +52,8 @@ impl<'a> Lexer<'a> {
 
             self.start = self.pos;
         }
+        
+        self.add_token(Token::NewLine);
 
         Ok(self.tokens)
     }
