@@ -5,13 +5,13 @@ use std::slice::Iter;
 use crate::lex::Token;
 
 #[derive(Debug, PartialEq, Eq)]
-enum Address {
+pub enum Address {
     Symbolic(String),
     Numeric(usize),
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum InstructionKind {
+pub enum Instruction {
     Load(Address),
     Store(Address),
     Add(Address),
@@ -25,15 +25,9 @@ enum InstructionKind {
     Data(usize),
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct Instruction {
-    kind: InstructionKind,
-    addr: usize,
-}
-
-struct ParseInfo {
-    instructions: Vec<Instruction>,
-    label_map: HashMap<String, usize>,
+pub struct ParseInfo {
+    pub instructions: Vec<Instruction>,
+    pub label_map: HashMap<String, usize>,
 }
 
 impl ParseInfo {
@@ -92,12 +86,8 @@ impl<'a> Parser<'a> {
         self.it.peek().copied()
     }
 
-    fn add_ins(&mut self, kind: InstructionKind) {
-        self.info.instructions.push(Instruction {
-            kind,
-            addr: self.paddr,
-        });
-        self.paddr += 1;
+    fn add_ins(&mut self, ins: Instruction) {
+        self.info.instructions.push(ins);
     }
 
     fn check_newline(&mut self) -> Result<(), String> {
@@ -131,13 +121,13 @@ impl<'a> Parser<'a> {
         self.check_newline()?;
 
         match token {
-            Token::Load => self.add_ins(InstructionKind::Load(addr)),
-            Token::Store => self.add_ins(InstructionKind::Store(addr)),
-            Token::Add => self.add_ins(InstructionKind::Add(addr)),
-            Token::Subtract => self.add_ins(InstructionKind::Subtract(addr)),
-            Token::BranchZero => self.add_ins(InstructionKind::BranchZero(addr)),
-            Token::BranchPositive => self.add_ins(InstructionKind::BranchPositive(addr)),
-            Token::BranchAlways => self.add_ins(InstructionKind::BranchAlways(addr)),
+            Token::Load => self.add_ins(Instruction::Load(addr)),
+            Token::Store => self.add_ins(Instruction::Store(addr)),
+            Token::Add => self.add_ins(Instruction::Add(addr)),
+            Token::Subtract => self.add_ins(Instruction::Subtract(addr)),
+            Token::BranchZero => self.add_ins(Instruction::BranchZero(addr)),
+            Token::BranchPositive => self.add_ins(Instruction::BranchPositive(addr)),
+            Token::BranchAlways => self.add_ins(Instruction::BranchAlways(addr)),
             _ => unreachable!(),
         }
 
@@ -148,9 +138,9 @@ impl<'a> Parser<'a> {
         self.check_newline()?;
 
         match token {
-            Token::Input => self.add_ins(InstructionKind::Input),
-            Token::Output => self.add_ins(InstructionKind::Output),
-            Token::Halt => self.add_ins(InstructionKind::Halt),
+            Token::Input => self.add_ins(Instruction::Input),
+            Token::Output => self.add_ins(Instruction::Output),
+            Token::Halt => self.add_ins(Instruction::Halt),
             _ => unreachable!(),
         }
 
@@ -171,7 +161,7 @@ impl<'a> Parser<'a> {
             return Err("No token found".to_owned());
         };
 
-        self.add_ins(InstructionKind::Data(num));
+        self.add_ins(Instruction::Data(num));
 
         Ok(())
     }
@@ -196,73 +186,62 @@ mod tests {
         parse(&tokens)
     }
 
-    fn ins_at_zero(kind: InstructionKind) -> Instruction {
-        Instruction { kind, addr: 0 }
-    }
-
     #[test]
     fn parse_with_addr() {
         use Address::Numeric;
-        use InstructionKind::*;
 
-        assert_eq!(single("lda 01"), ins_at_zero(Load(Numeric(1))));
-        assert_eq!(single("sto 02"), ins_at_zero(Store(Numeric(2))));
-        assert_eq!(single("add 03"), ins_at_zero(Add(Numeric(3))));
-        assert_eq!(single("sub 04"), ins_at_zero(Subtract(Numeric(4))));
-        assert_eq!(single("brz 05"), ins_at_zero(BranchZero(Numeric(5))));
-        assert_eq!(single("brp 06"), ins_at_zero(BranchPositive(Numeric(6))));
-        assert_eq!(single("bra 07"), ins_at_zero(BranchAlways(Numeric(7))));
+        assert_eq!(single("lda 01"), Instruction::Load(Numeric(1)));
+        assert_eq!(single("sto 02"), Instruction::Store(Numeric(2)));
+        assert_eq!(single("add 03"), Instruction::Add(Numeric(3)));
+        assert_eq!(single("sub 04"), Instruction::Subtract(Numeric(4)));
+        assert_eq!(single("brz 05"), Instruction::BranchZero(Numeric(5)));
+        assert_eq!(single("brp 06"), Instruction::BranchPositive(Numeric(6)));
+        assert_eq!(single("bra 07"), Instruction::BranchAlways(Numeric(7)));
     }
 
     #[test]
     fn parse_with_symbolic_addr() {
         use Address::Symbolic;
-        use InstructionKind::*;
 
         assert_eq!(
             single("lda this"),
-            ins_at_zero(Load(Symbolic("this".into())))
+            Instruction::Load(Symbolic("this".into()))
         );
-        assert_eq!(single("sto is"), ins_at_zero(Store(Symbolic("is".into()))));
-        assert_eq!(single("add a"), ins_at_zero(Add(Symbolic("a".into()))));
+        assert_eq!(single("sto is"), Instruction::Store(Symbolic("is".into())));
+        assert_eq!(single("add a"), Instruction::Add(Symbolic("a".into())));
         assert_eq!(
             single("sub test"),
-            ins_at_zero(Subtract(Symbolic("test".into())))
+            Instruction::Subtract(Symbolic("test".into()))
         );
         assert_eq!(
             single("brz with"),
-            ins_at_zero(BranchZero(Symbolic("with".into())))
+            Instruction::BranchZero(Symbolic("with".into()))
         );
         assert_eq!(
             single("brp symbolic"),
-            ins_at_zero(BranchPositive(Symbolic("symbolic".into())))
+            Instruction::BranchPositive(Symbolic("symbolic".into()))
         );
         assert_eq!(
             single("bra addresses"),
-            ins_at_zero(BranchAlways(Symbolic("addresses".into())))
+            Instruction::BranchAlways(Symbolic("addresses".into()))
         );
     }
 
     #[test]
     fn parse_without_addr() {
-        use InstructionKind::*;
-
-        assert_eq!(single("inp"), ins_at_zero(Input));
-        assert_eq!(single("out"), ins_at_zero(Output));
-        assert_eq!(single("hlt"), ins_at_zero(Halt));
+        assert_eq!(single("inp"), Instruction::Input);
+        assert_eq!(single("out"), Instruction::Output);
+        assert_eq!(single("hlt"), Instruction::Halt);
     }
 
     #[test]
     fn parse_data() {
-        use InstructionKind::Data;
-
-        assert_eq!(single("dat 123"), ins_at_zero(Data(123)));
+        assert_eq!(single("dat 123"), Instruction::Data(123));
     }
 
     #[test]
     fn parse_handles_newlines() {
         use Address::Numeric;
-        use InstructionKind::*;
 
         let source = "
             lda 10 ; this is
@@ -272,22 +251,10 @@ mod tests {
             hlt";
         let info = parse_src(source).unwrap();
         let expected = vec![
-            Instruction {
-                kind: Load(Numeric(10)),
-                addr: 0,
-            },
-            Instruction {
-                kind: Add(Numeric(11)),
-                addr: 1,
-            },
-            Instruction {
-                kind: Store(Numeric(10)),
-                addr: 2,
-            },
-            Instruction {
-                kind: Halt,
-                addr: 3,
-            },
+            Instruction::Load(Numeric(10)),
+            Instruction::Add(Numeric(11)),
+            Instruction::Store(Numeric(10)),
+            Instruction::Halt,
         ];
 
         assert_eq!(info.instructions, expected);
