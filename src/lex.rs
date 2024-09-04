@@ -2,7 +2,7 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Token {
+pub enum TokenKind {
     Number(usize),
     Label(String),
     LabelDef(String),
@@ -21,23 +21,35 @@ pub enum Token {
     Eof,
 }
 
+#[derive(Debug, Clone)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub line: usize,
+}
+
 struct Lexer<'a> {
     source: &'a str,
     it: Peekable<Chars<'a>>,
     tokens: Vec<Token>,
     start: usize,
     pos: usize,
+    line: usize,
 }
 
 impl<'a> Lexer<'a> {
-    fn new(source: &'a str) -> Self {
+    fn new(line: usize, source: &'a str) -> Self {
         Self {
             source,
             it: source.chars().peekable(),
             tokens: vec![],
             start: 0,
             pos: 0,
+            line,
         }
+    }
+
+    fn make_err_msg(&self, msg: String) -> String {
+        format!("error @ line {}: {}", self.line, msg)
     }
 
     fn make_tokens(mut self) -> Result<Vec<Token>, String> {
@@ -47,13 +59,13 @@ impl<'a> Lexer<'a> {
                 ch if ch.is_whitespace() => (),
                 ch if ch.is_ascii_digit() => self.number()?,
                 ch if ch.is_ascii_alphabetic() => self.kw_or_label()?,
-                _ => return Err(format!("Unrecognised character '{ch}'")),
+                _ => return Err(self.make_err_msg(format!("unexpected character '{}'", ch))),
             }
 
             self.start = self.pos;
         }
 
-        self.add_token(Token::NewLine);
+        self.add_token(TokenKind::NewLine);
 
         Ok(self.tokens)
     }
@@ -71,7 +83,11 @@ impl<'a> Lexer<'a> {
         self.source[self.start..self.pos].to_owned()
     }
 
-    fn add_token(&mut self, token: Token) {
+    fn add_token(&mut self, kind: TokenKind) {
+        let token = Token {
+            kind,
+            line: self.line,
+        };
         self.tokens.push(token);
     }
 
@@ -92,8 +108,12 @@ impl<'a> Lexer<'a> {
         self.consume_while(|ch| ch.is_ascii_digit());
 
         match self.lexeme().parse::<usize>() {
-            Ok(n) => self.add_token(Token::Number(n)),
-            Err(_) => return Err(format!("Invalid number literal '{}'", self.lexeme())),
+            Ok(n) => self.add_token(TokenKind::Number(n)),
+            Err(_) => {
+                return Err(
+                    self.make_err_msg(format!("invalid number literal \"{}\"", self.lexeme()))
+                )
+            }
         }
 
         Ok(())
@@ -104,57 +124,60 @@ impl<'a> Lexer<'a> {
 
         let lexeme = self.lexeme();
 
-        if let Some(token) = map_kw(&lexeme) {
-            self.add_token(token);
+        if let Some(kind) = map_kw(&lexeme) {
+            self.add_token(kind);
             return Ok(());
         }
 
         if matches!(self.peek(), Some(':')) {
-            self.add_token(Token::LabelDef(lexeme));
+            self.add_token(TokenKind::LabelDef(lexeme));
             self.consume();
         } else {
-            self.add_token(Token::Label(lexeme));
+            self.add_token(TokenKind::Label(lexeme));
         }
 
         Ok(())
     }
 }
 
-fn map_kw(word: &str) -> Option<Token> {
+fn map_kw(word: &str) -> Option<TokenKind> {
     match word {
-        "lda" => Some(Token::Load),
-        "sto" => Some(Token::Store),
-        "add" => Some(Token::Add),
-        "sub" => Some(Token::Subtract),
-        "inp" => Some(Token::Input),
-        "out" => Some(Token::Output),
-        "hlt" => Some(Token::Halt),
-        "brz" => Some(Token::BranchZero),
-        "brp" => Some(Token::BranchPositive),
-        "bra" => Some(Token::BranchAlways),
-        "dat" => Some(Token::Data),
+        "lda" => Some(TokenKind::Load),
+        "sto" => Some(TokenKind::Store),
+        "add" => Some(TokenKind::Add),
+        "sub" => Some(TokenKind::Subtract),
+        "inp" => Some(TokenKind::Input),
+        "out" => Some(TokenKind::Output),
+        "hlt" => Some(TokenKind::Halt),
+        "brz" => Some(TokenKind::BranchZero),
+        "brp" => Some(TokenKind::BranchPositive),
+        "bra" => Some(TokenKind::BranchAlways),
+        "dat" => Some(TokenKind::Data),
         _ => None,
     }
 }
 
-pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
+pub fn tokenize(source: &str) -> Result<Vec<Token>, (Vec<Token>, String)> {
     let mut tokens = vec![];
     let mut errors = vec![];
 
     for (i, line) in source.lines().enumerate() {
-        let lexer = Lexer::new(line);
+        let lexer = Lexer::new(i, line);
 
         match lexer.make_tokens() {
             Ok(t) => tokens.extend(t.into_iter()),
-            Err(e) => errors.push(format!("Error {i}: {e}")),
+            Err(e) => errors.push(e),
         }
     }
 
     if errors.is_empty() {
-        tokens.push(Token::Eof);
+        tokens.push(Token {
+            kind: TokenKind::Eof,
+            line: source.lines().count(),
+        });
         Ok(tokens)
     } else {
-        Err(errors.join("\n"))
+        Err((tokens, errors.join("\n")))
     }
 }
 
@@ -162,31 +185,34 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
 mod tests {
     use super::*;
 
-    fn single(source: &str) -> Token {
-        tokenize(source).unwrap().remove(0)
+    fn single(source: &str) -> TokenKind {
+        tokenize(source).unwrap().remove(0).kind
     }
 
     #[test]
     fn tokenize_kw() {
-        assert_eq!(single("lda"), Token::Load);
-        assert_eq!(single("sto"), Token::Store);
-        assert_eq!(single("add"), Token::Add);
-        assert_eq!(single("sub"), Token::Subtract);
-        assert_eq!(single("inp"), Token::Input);
-        assert_eq!(single("out"), Token::Output);
-        assert_eq!(single("hlt"), Token::Halt);
-        assert_eq!(single("brz"), Token::BranchZero);
-        assert_eq!(single("brp"), Token::BranchPositive);
-        assert_eq!(single("bra"), Token::BranchAlways);
-        assert_eq!(single("dat"), Token::Data);
+        assert_eq!(single("lda"), TokenKind::Load);
+        assert_eq!(single("sto"), TokenKind::Store);
+        assert_eq!(single("add"), TokenKind::Add);
+        assert_eq!(single("sub"), TokenKind::Subtract);
+        assert_eq!(single("inp"), TokenKind::Input);
+        assert_eq!(single("out"), TokenKind::Output);
+        assert_eq!(single("hlt"), TokenKind::Halt);
+        assert_eq!(single("brz"), TokenKind::BranchZero);
+        assert_eq!(single("brp"), TokenKind::BranchPositive);
+        assert_eq!(single("bra"), TokenKind::BranchAlways);
+        assert_eq!(single("dat"), TokenKind::Data);
     }
 
     #[test]
     fn tokenize_label() {
-        assert_eq!(single("test_label"), Token::Label("test_label".into()));
-        assert_eq!(single("test_label:"), Token::LabelDef("test_label".into()));
-        assert_eq!(single("HasCaps"), Token::Label("HasCaps".into()));
-        assert_eq!(single("HasNums123"), Token::Label("HasNums123".into()));
+        assert_eq!(single("test_label"), TokenKind::Label("test_label".into()));
+        assert_eq!(
+            single("test_label:"),
+            TokenKind::LabelDef("test_label".into())
+        );
+        assert_eq!(single("HasCaps"), TokenKind::Label("HasCaps".into()));
+        assert_eq!(single("HasNums123"), TokenKind::Label("HasNums123".into()));
     }
 
     #[test]
@@ -206,8 +232,8 @@ mod tests {
 
     #[test]
     fn tokenize_num() {
-        assert_eq!(single("123"), Token::Number(123));
-        assert_eq!(single("000123"), Token::Number(123));
+        assert_eq!(single("123"), TokenKind::Number(123));
+        assert_eq!(single("000123"), TokenKind::Number(123));
         assert!(tokenize("12.3").is_err());
     }
 

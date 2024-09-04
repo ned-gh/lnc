@@ -56,9 +56,33 @@ impl Log for CLILogger {
 }
 
 pub fn run(source: &str) -> Result<(), String> {
-    let tokens = lex::tokenize(source)?;
-    let parse_info = parse::parse(&tokens)?;
-    let mem = assembler::assemble(&parse_info)?;
+    let mut errors = vec![];
+
+    let tokens = match lex::tokenize(source) {
+        Ok(toks) => toks,
+        Err((toks, e)) => {
+            errors.push(e);
+            toks
+        }
+    };
+    let parse_info = match parse::parse(&tokens) {
+        Ok(pi) => pi,
+        Err((pi, e)) => {
+            errors.push(e);
+            pi
+        }
+    };
+    let mem = match assembler::assemble(&parse_info) {
+        Ok(m) => m,
+        Err(e) => {
+            errors.push(e);
+            return Err(errors.join("\n"));
+        }
+    };
+
+    if !errors.is_empty() {
+        return Err(errors.join("\n"));
+    }
 
     let mut input = CLIInput::default();
     let mut output = CLIOutput::default();

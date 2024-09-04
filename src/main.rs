@@ -5,7 +5,6 @@ fn main() {
         inp
         loop:
             out         ; this is a comment
-            sto count
             sub one
             sto count
             brp loop

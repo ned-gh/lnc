@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::iter::Peekable;
 use std::slice::Iter;
 
-use crate::lex::Token;
+use crate::lex::{Token, TokenKind};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Address {
@@ -25,6 +25,7 @@ pub enum Instruction {
     Data(usize),
 }
 
+#[derive(Debug)]
 pub struct ParseInfo {
     pub instructions: Vec<Instruction>,
     pub label_map: HashMap<String, usize>,
@@ -43,6 +44,7 @@ struct Parser<'a> {
     it: Peekable<Iter<'a, Token>>,
     paddr: usize,
     info: ParseInfo,
+    errors: Vec<String>,
 }
 
 impl<'a> Parser<'a> {
@@ -51,31 +53,62 @@ impl<'a> Parser<'a> {
             it: tokens.iter().peekable(),
             paddr: 0,
             info: ParseInfo::new(),
+            errors: vec![],
         }
     }
 
-    fn make_instructions(mut self) -> Result<ParseInfo, String> {
+    fn add_err_msg(&mut self, line: usize, msg: String) {
+        self.errors.push(format!("error @ line {}: {}", line, msg));
+    }
+
+    fn make_instructions(mut self) -> Result<ParseInfo, (ParseInfo, String)> {
         while let Some(token) = self.consume() {
-            match token {
-                Token::LabelDef(s) => {
+            let res = match token.kind {
+                TokenKind::LabelDef(s) => {
                     self.info.label_map.insert(s, self.paddr);
+                    Ok(())
                 }
-                Token::Load
-                | Token::Store
-                | Token::Add
-                | Token::Subtract
-                | Token::BranchZero
-                | Token::BranchPositive
-                | Token::BranchAlways => self.ins_with_addr(token)?,
-                Token::Input | Token::Output | Token::Halt => self.ins_without_addr(token)?,
-                Token::Data => self.data()?,
-                Token::NewLine => (),
-                Token::Eof => break,
-                _ => return Err(format!("Invalid token {:?}", token)),
+                TokenKind::Load
+                | TokenKind::Store
+                | TokenKind::Add
+                | TokenKind::Subtract
+                | TokenKind::BranchZero
+                | TokenKind::BranchPositive
+                | TokenKind::BranchAlways => self.ins_with_addr(&token),
+                TokenKind::Input | TokenKind::Output | TokenKind::Halt => {
+                    self.ins_without_addr(&token)
+                }
+                TokenKind::Data => self.data(),
+                TokenKind::NewLine => Ok(()),
+                TokenKind::Eof => break,
+                TokenKind::Number(n) => Err(format!(
+                    "found number ({n}) instead of instruction/label def"
+                )),
+                TokenKind::Label(s) => Err(format!(
+                    "found label \"{s}\" instead of instruction/label def"
+                )),
+            };
+
+            if let Err(e) = res {
+                self.add_err_msg(token.line, e);
+                self.sync();
             }
         }
 
-        Ok(self.info)
+        if self.errors.is_empty() {
+            Ok(self.info)
+        } else {
+            Err((self.info, self.errors.join("\n")))
+        }
+    }
+
+    fn sync(&mut self) {
+        while let Some(token) = self.peek() {
+            if matches!(token.kind, TokenKind::NewLine | TokenKind::Eof) {
+                break;
+            }
+            self.consume();
+        }
     }
 
     fn consume(&mut self) -> Option<Token> {
@@ -93,55 +126,58 @@ impl<'a> Parser<'a> {
 
     fn check_newline(&mut self) -> Result<(), String> {
         if let Some(nl_token) = self.consume() {
-            if !matches!(nl_token, Token::NewLine | Token::Eof) {
-                return Err(format!("Encountered {:?} instead of new line", nl_token));
+            if !matches!(nl_token.kind, TokenKind::NewLine | TokenKind::Eof) {
+                return Err(format!(
+                    "invalid token {:?}: expected end of line",
+                    nl_token
+                ));
             }
         } else {
-            return Err("No token found".to_owned());
+            return Err("unexpected EOF: expected address".to_owned());
         }
 
         Ok(())
     }
 
-    fn ins_with_addr(&mut self, token: Token) -> Result<(), String> {
+    fn ins_with_addr(&mut self, token: &Token) -> Result<(), String> {
         let addr = if let Some(addr_token) = self.consume() {
-            match addr_token {
-                Token::Number(n) => {
+            match addr_token.kind {
+                TokenKind::Number(n) => {
                     if n >= 100 {
-                        return Err(format!("Invalid address {}: too large", n));
+                        return Err(format!("invalid address {}: too large", n));
                     }
                     Address::Numeric(n)
                 }
-                Token::Label(s) => Address::Symbolic(s),
-                _ => return Err(format!("Invalid token {:?}: expected address", addr_token)),
+                TokenKind::Label(s) => Address::Symbolic(s),
+                _ => return Err(format!("invalid token {:?}: expected address", addr_token)),
             }
         } else {
-            return Err("No token found".to_owned());
+            return Err("unexpected EOF: expected address".to_owned());
         };
 
         self.check_newline()?;
 
-        match token {
-            Token::Load => self.add_ins(Instruction::Load(addr)),
-            Token::Store => self.add_ins(Instruction::Store(addr)),
-            Token::Add => self.add_ins(Instruction::Add(addr)),
-            Token::Subtract => self.add_ins(Instruction::Subtract(addr)),
-            Token::BranchZero => self.add_ins(Instruction::BranchZero(addr)),
-            Token::BranchPositive => self.add_ins(Instruction::BranchPositive(addr)),
-            Token::BranchAlways => self.add_ins(Instruction::BranchAlways(addr)),
+        match token.kind {
+            TokenKind::Load => self.add_ins(Instruction::Load(addr)),
+            TokenKind::Store => self.add_ins(Instruction::Store(addr)),
+            TokenKind::Add => self.add_ins(Instruction::Add(addr)),
+            TokenKind::Subtract => self.add_ins(Instruction::Subtract(addr)),
+            TokenKind::BranchZero => self.add_ins(Instruction::BranchZero(addr)),
+            TokenKind::BranchPositive => self.add_ins(Instruction::BranchPositive(addr)),
+            TokenKind::BranchAlways => self.add_ins(Instruction::BranchAlways(addr)),
             _ => unreachable!(),
         }
 
         Ok(())
     }
 
-    fn ins_without_addr(&mut self, token: Token) -> Result<(), String> {
+    fn ins_without_addr(&mut self, token: &Token) -> Result<(), String> {
         self.check_newline()?;
 
-        match token {
-            Token::Input => self.add_ins(Instruction::Input),
-            Token::Output => self.add_ins(Instruction::Output),
-            Token::Halt => self.add_ins(Instruction::Halt),
+        match token.kind {
+            TokenKind::Input => self.add_ins(Instruction::Input),
+            TokenKind::Output => self.add_ins(Instruction::Output),
+            TokenKind::Halt => self.add_ins(Instruction::Halt),
             _ => unreachable!(),
         }
 
@@ -150,7 +186,7 @@ impl<'a> Parser<'a> {
 
     fn data(&mut self) -> Result<(), String> {
         let num = if let Some(num_token) = self.consume() {
-            if let Token::Number(n) = num_token {
+            if let TokenKind::Number(n) = num_token.kind {
                 if n >= 1000 {
                     return Err(format!("Invalid data {}: too large", n));
                 }
@@ -168,7 +204,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub fn parse(tokens: &[Token]) -> Result<ParseInfo, String> {
+pub fn parse(tokens: &[Token]) -> Result<ParseInfo, (ParseInfo, String)> {
     let parser = Parser::new(tokens);
     parser.make_instructions()
 }
@@ -182,7 +218,7 @@ mod tests {
         parse_src(source).unwrap().instructions.remove(0)
     }
 
-    fn parse_src(source: &str) -> Result<ParseInfo, String> {
+    fn parse_src(source: &str) -> Result<ParseInfo, (ParseInfo, String)> {
         let tokens = tokenize(source).unwrap();
         parse(&tokens)
     }

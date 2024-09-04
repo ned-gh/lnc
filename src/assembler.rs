@@ -11,26 +11,38 @@ pub fn assemble(parse_info: &ParseInfo) -> Result<[usize; 100], String> {
     }
 
     let mut mem = [0; 100];
+    let mut errors = vec![];
 
     for (paddr, ins) in parse_info.instructions.iter().enumerate() {
-        let code = match ins {
-            Instruction::Load(addr) => 500 + resolve_addr(addr, &parse_info.label_map)?,
-            Instruction::Store(addr) => 300 + resolve_addr(addr, &parse_info.label_map)?,
-            Instruction::Add(addr) => 100 + resolve_addr(addr, &parse_info.label_map)?,
-            Instruction::Subtract(addr) => 200 + resolve_addr(addr, &parse_info.label_map)?,
-            Instruction::Input => 901,
-            Instruction::Output => 902,
-            Instruction::Halt => 0,
-            Instruction::BranchZero(addr) => 700 + resolve_addr(addr, &parse_info.label_map)?,
-            Instruction::BranchPositive(addr) => 800 + resolve_addr(addr, &parse_info.label_map)?,
-            Instruction::BranchAlways(addr) => 600 + resolve_addr(addr, &parse_info.label_map)?,
-            Instruction::Data(data) => *data,
-        };
-
-        mem[paddr] = code;
+        match get_code(parse_info, ins) {
+            Ok(code) => mem[paddr] = code,
+            Err(e) => errors.push(e),
+        }
     }
 
-    Ok(mem)
+    if errors.is_empty() {
+        Ok(mem)
+    } else {
+        Err(errors.join("\n"))
+    }
+}
+
+fn get_code(parse_info: &ParseInfo, ins: &Instruction) -> Result<usize, String> {
+    let code = match ins {
+        Instruction::Load(addr) => 500 + resolve_addr(addr, &parse_info.label_map)?,
+        Instruction::Store(addr) => 300 + resolve_addr(addr, &parse_info.label_map)?,
+        Instruction::Add(addr) => 100 + resolve_addr(addr, &parse_info.label_map)?,
+        Instruction::Subtract(addr) => 200 + resolve_addr(addr, &parse_info.label_map)?,
+        Instruction::Input => 901,
+        Instruction::Output => 902,
+        Instruction::Halt => 0,
+        Instruction::BranchZero(addr) => 700 + resolve_addr(addr, &parse_info.label_map)?,
+        Instruction::BranchPositive(addr) => 800 + resolve_addr(addr, &parse_info.label_map)?,
+        Instruction::BranchAlways(addr) => 600 + resolve_addr(addr, &parse_info.label_map)?,
+        Instruction::Data(data) => *data,
+    };
+
+    Ok(code)
 }
 
 fn resolve_addr(addr: &Address, label_map: &HashMap<String, usize>) -> Result<usize, String> {
