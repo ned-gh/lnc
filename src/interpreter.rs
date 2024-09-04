@@ -1,19 +1,19 @@
-trait Output {
+pub trait Output {
     fn send(&mut self, val: usize);
 }
 
-trait Input {
+pub trait Input {
     fn take(&mut self) -> Result<LNCInput, String>;
 }
 
-trait Log {
+pub trait Log {
     fn log(&mut self, msg: String);
 }
 
-struct LNCInput(usize);
+pub struct LNCInput(usize);
 
 impl LNCInput {
-    fn new(num: usize) -> Option<Self> {
+    pub fn new(num: usize) -> Option<Self> {
         if num < 1000 {
             Some(LNCInput(num))
         } else {
@@ -28,7 +28,7 @@ impl From<LNCInput> for usize {
     }
 }
 
-struct Interpreter<'a, I: Input, O: Output, L: Log> {
+pub struct Interpreter<'a, I: Input, O: Output, L: Log> {
     mem: [usize; 100],
     pc: usize,
     acc: usize,
@@ -40,7 +40,7 @@ struct Interpreter<'a, I: Input, O: Output, L: Log> {
 }
 
 impl<'a, I: Input, O: Output, L: Log> Interpreter<'a, I, O, L> {
-    fn new(mem: [usize; 100], input: &'a mut I, output: &'a mut O, logger: &'a mut L) -> Self {
+    pub fn new(mem: [usize; 100], input: &'a mut I, output: &'a mut O, logger: &'a mut L) -> Self {
         Self {
             mem,
             pc: 0,
@@ -53,11 +53,11 @@ impl<'a, I: Input, O: Output, L: Log> Interpreter<'a, I, O, L> {
         }
     }
 
-    fn is_halted(&self) -> bool {
+    pub fn is_halted(&self) -> bool {
         self.halted
     }
 
-    fn step(&mut self) -> Result<(), String> {
+    pub fn step(&mut self) -> Result<(), String> {
         if self.halted {
             self.logger.log("Cannot step: interpreter is halted".into());
             return Ok(());
@@ -166,9 +166,10 @@ impl<'a, I: Input, O: Output, L: Log> Interpreter<'a, I, O, L> {
 
         if self.neg_flag {
             self.logger.log(format!(
-                "--> {} - {} = {} >= 1000: underflow",
+                "--> {} - {} = {} < 1000: underflow",
                 self.acc, self.mem[addr], new_val
             ));
+            self.logger.log("neg_flag set".into());
         }
 
         self.acc = (new_val + 1000) as usize % 1000;

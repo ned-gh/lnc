@@ -88,6 +88,7 @@ impl<'a> Parser<'a> {
 
     fn add_ins(&mut self, ins: Instruction) {
         self.info.instructions.push(ins);
+        self.paddr += 1;
     }
 
     fn check_newline(&mut self) -> Result<(), String> {
@@ -167,7 +168,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn parse(tokens: &[Token]) -> Result<ParseInfo, String> {
+pub fn parse(tokens: &[Token]) -> Result<ParseInfo, String> {
     let parser = Parser::new(tokens);
     parser.make_instructions()
 }
@@ -288,5 +289,33 @@ mod tests {
         assert!(parse_src("dat 123 a_label").is_err());
         assert!(parse_src("dat a_label 123").is_err());
         assert!(parse_src("dat 123 456").is_err());
+    }
+
+    #[test]
+    fn maps_label_addr() {
+        let src = "
+        test:
+        another_test:
+
+        this_should_be_0:
+        add 1
+        add 3
+        sub 2
+
+        a_label:
+        inp
+        b_label:";
+
+        let info = parse_src(src).unwrap();
+
+        let expected = HashMap::from([
+            ("test".to_owned(), 0),
+            ("another_test".to_owned(), 0),
+            ("this_should_be_0".to_owned(), 0),
+            ("a_label".to_owned(), 3),
+            ("b_label".to_owned(), 4),
+        ]);
+
+        assert_eq!(info.label_map, expected);
     }
 }
