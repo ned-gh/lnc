@@ -3,11 +3,29 @@ trait Output {
 }
 
 trait Input {
-    fn take(&mut self) -> Result<usize, String>;
+    fn take(&mut self) -> Result<LNCInput, String>;
 }
 
 trait Log {
     fn log(&mut self, msg: String);
+}
+
+struct LNCInput(usize);
+
+impl LNCInput {
+    fn new(num: usize) -> Option<Self> {
+        if num < 1000 {
+            Some(LNCInput(num))
+        } else {
+            None
+        }
+    }
+}
+
+impl From<LNCInput> for usize {
+    fn from(value: LNCInput) -> Self {
+        value.0
+    }
 }
 
 struct Interpreter<'a, I: Input, O: Output, L: Log> {
@@ -104,7 +122,7 @@ impl<'a, I: Input, O: Output, L: Log> Interpreter<'a, I, O, L> {
     fn inp(&mut self) -> Result<(), String> {
         self.logger.log("--> inp".into());
 
-        let inp_val = self.input.take()?;
+        let inp_val = self.input.take()?.into();
         self.logger.log(format!("--> {} was input value", inp_val));
 
         self.acc = inp_val;
@@ -114,7 +132,8 @@ impl<'a, I: Input, O: Output, L: Log> Interpreter<'a, I, O, L> {
 
     fn out(&mut self) {
         self.logger.log("--> out".into());
-        self.logger.log(format!("--> {} was output value", self.acc));
+        self.logger
+            .log(format!("--> {} was output value", self.acc));
 
         self.output.send(self.acc);
     }
