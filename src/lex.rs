@@ -19,6 +19,12 @@ pub enum TokenKind {
     Data,
     NewLine,
     Eof,
+
+    // for tests
+    TestName(String),
+    OpenSquareBracket,
+    CloseSquareBracket,
+    Comma,
 }
 
 #[derive(Debug, Clone)]
@@ -56,6 +62,10 @@ impl<'a> Lexer<'a> {
         while let Some(ch) = self.consume() {
             match ch {
                 ';' => break,
+                '.' => self.test_name()?,
+                '[' => self.add_token(TokenKind::OpenSquareBracket),
+                ']' => self.add_token(TokenKind::CloseSquareBracket),
+                ',' => self.add_token(TokenKind::Comma),
                 ch if ch.is_whitespace() => (),
                 ch if ch.is_ascii_digit() => self.number()?,
                 ch if ch.is_ascii_alphabetic() => self.kw_or_label()?,
@@ -123,18 +133,41 @@ impl<'a> Lexer<'a> {
         self.consume_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_');
 
         let lexeme = self.lexeme();
+        let is_label_def = matches!(self.peek(), Some(':'));
 
         if let Some(kind) = map_kw(&lexeme) {
+            if is_label_def {
+                return Err(
+                    self.make_err_msg(format!("cannot use keyword \"{lexeme}\" as label name"))
+                );
+            }
             self.add_token(kind);
-            return Ok(());
-        }
-
-        if matches!(self.peek(), Some(':')) {
+        } else if is_label_def {
             self.add_token(TokenKind::LabelDef(lexeme));
             self.consume();
         } else {
             self.add_token(TokenKind::Label(lexeme));
         }
+
+        Ok(())
+    }
+
+    fn test_name(&mut self) -> Result<(), String> {
+        if let Some(ch) = self.consume() {
+            if !(ch.is_ascii_alphabetic() || ch == '_') {
+                return Err(format!(
+                    "unexpected character '{ch}': test names must start with a letter or '_'"
+                ));
+            }
+        } else {
+            return Err("tests must have a name".into());
+        }
+        self.consume_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_');
+
+        self.start += 1;
+        let lexeme = self.lexeme();
+
+        self.add_token(TokenKind::TestName(lexeme));
 
         Ok(())
     }
@@ -244,5 +277,19 @@ mod tests {
         assert!(tokenize("+").is_err());
         assert!(tokenize("-").is_err());
         assert!(tokenize("add 23 ; !@#$%^&*()").is_ok());
+    }
+
+    #[test]
+    fn tokenize_lnc_test() {
+        assert_eq!(
+            single(".test_name123"),
+            TokenKind::TestName("test_name123".into())
+        );
+        assert_eq!(single("["), TokenKind::OpenSquareBracket);
+        assert_eq!(single("]"), TokenKind::CloseSquareBracket);
+        assert_eq!(single(","), TokenKind::Comma);
+
+        assert!(tokenize(".1").is_err());
+        assert!(tokenize(".1test").is_err());
     }
 }

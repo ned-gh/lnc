@@ -25,10 +25,18 @@ pub enum Instruction {
     Data(usize),
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct LNCTest {
+    name: String,
+    inputs: Vec<usize>,
+    outputs: Vec<usize>,
+}
+
 #[derive(Debug)]
 pub struct ParseInfo {
     pub instructions: Vec<Instruction>,
     pub label_map: HashMap<String, usize>,
+    pub tests: Vec<LNCTest>,
 }
 
 impl ParseInfo {
@@ -36,6 +44,7 @@ impl ParseInfo {
         Self {
             instructions: vec![],
             label_map: HashMap::new(),
+            tests: vec![],
         }
     }
 }
@@ -87,6 +96,10 @@ impl<'a> Parser<'a> {
                 TokenKind::Label(s) => Err(format!(
                     "found label \"{s}\" instead of instruction/label def"
                 )),
+                TokenKind::TestName(s) => self.lnc_test(s),
+                TokenKind::OpenSquareBracket => Err("unexpected bracket '['".into()),
+                TokenKind::CloseSquareBracket => Err("unexpected bracket ']'".into()),
+                TokenKind::Comma => Err("unexpected comma ','".into()),
             };
 
             if let Err(e) = res {
@@ -124,8 +137,22 @@ impl<'a> Parser<'a> {
         self.paddr += 1;
     }
 
+    fn check_next(&mut self, kind: TokenKind) -> Result<(), String> {
+        if let Some(next) = self.peek() {
+            if next.kind != kind {
+                return Err(format!("expected {:?}: found {:?}", kind, next.kind));
+            }
+        } else {
+            return Err(format!("unexpected EOF: expected {:?}", kind));
+        }
+
+        self.consume();
+
+        Ok(())
+    }
+
     fn check_newline(&mut self) -> Result<(), String> {
-        if let Some(nl_token) = self.consume() {
+        if let Some(nl_token) = self.peek() {
             if !matches!(nl_token.kind, TokenKind::NewLine | TokenKind::Eof) {
                 return Err(format!(
                     "invalid token {:?}: expected end of line",
@@ -135,6 +162,8 @@ impl<'a> Parser<'a> {
         } else {
             return Err("unexpected EOF: expected address".to_owned());
         }
+
+        self.consume();
 
         Ok(())
     }
@@ -188,19 +217,70 @@ impl<'a> Parser<'a> {
         let num = if let Some(num_token) = self.consume() {
             if let TokenKind::Number(n) = num_token.kind {
                 if n >= 1000 {
-                    return Err(format!("Invalid data {}: too large", n));
+                    return Err(format!("invalid data {}: too large", n));
                 }
                 n
             } else {
-                return Err(format!("Invalid token {:?}: expected number", num_token));
+                return Err(format!("invalid token {:?}: expected number", num_token));
             }
         } else {
-            return Err("No token found".to_owned());
+            return Err("io token found".to_owned());
         };
 
         self.add_ins(Instruction::Data(num));
 
         Ok(())
+    }
+
+    fn lnc_test(&mut self, name: String) -> Result<(), String> {
+        let inputs = self.number_list()?;
+        let outputs = self.number_list()?;
+
+        self.check_newline()?;
+
+        self.info.tests.push(LNCTest {
+            name,
+            inputs,
+            outputs,
+        });
+
+        Ok(())
+    }
+
+    fn number_list(&mut self) -> Result<Vec<usize>, String> {
+        self.check_next(TokenKind::OpenSquareBracket)?;
+
+        let mut nums = vec![];
+        let mut prev_was_num = false;
+
+        while let Some(token) = self.peek() {
+            match token.kind {
+                TokenKind::Number(n) => {
+                    if prev_was_num {
+                        return Err(format!("expected ',' or ']': found number ({n})"));
+                    }
+                    if n >= 1000 {
+                        return Err(format!("invalid number {n}: too large"));
+                    }
+                    nums.push(n);
+                    prev_was_num = true;
+                }
+                TokenKind::Comma => {
+                    if !prev_was_num {
+                        return Err("unexpected ','".into());
+                    }
+                    prev_was_num = false;
+                }
+                TokenKind::CloseSquareBracket => break,
+                _ => return Err(format!("expected number, ',', or ']': found {token:?}")),
+            }
+
+            self.consume();
+        }
+
+        self.check_next(TokenKind::CloseSquareBracket)?;
+
+        Ok(nums)
     }
 }
 
@@ -221,6 +301,24 @@ mod tests {
     fn parse_src(source: &str) -> Result<ParseInfo, (ParseInfo, String)> {
         let tokens = tokenize(source).unwrap();
         parse(&tokens)
+    }
+
+    fn get_nlist(source: &str) -> Result<Vec<usize>, String> {
+        let tokens = tokenize(source).unwrap();
+        let mut parser = Parser::new(&tokens);
+        parser.number_list()
+    }
+
+    fn make_test(name: &str, inputs: Vec<usize>, outputs: Vec<usize>) -> LNCTest {
+        LNCTest {
+            name: name.into(),
+            inputs,
+            outputs,
+        }
+    }
+
+    fn get_test(source: &str) -> LNCTest {
+        parse_src(source).unwrap().tests.remove(0)
     }
 
     #[test]
@@ -353,5 +451,49 @@ mod tests {
         ]);
 
         assert_eq!(info.label_map, expected);
+    }
+
+    #[test]
+    fn parse_number_list() {
+        assert_eq!(get_nlist("[]").unwrap(), vec![]);
+        assert_eq!(get_nlist("[1]").unwrap(), vec![1]);
+        assert_eq!(get_nlist("[1,]").unwrap(), vec![1]);
+        assert_eq!(get_nlist("[1, 2, 3]").unwrap(), vec![1, 2, 3]);
+        assert_eq!(get_nlist("[1,    2, 3]").unwrap(), vec![1, 2, 3]);
+        assert_eq!(get_nlist("[1,    2, 3        ]").unwrap(), vec![1, 2, 3]);
+        assert_eq!(get_nlist("[1,2,3]").unwrap(), vec![1, 2, 3]);
+        assert_eq!(get_nlist("[1, 2, 3, ]").unwrap(), vec![1, 2, 3]);
+
+        assert!(get_nlist("[,]").is_err());
+        assert!(get_nlist("[add]").is_err());
+        assert!(get_nlist("[label:]").is_err());
+        assert!(get_nlist("[label:, 1]").is_err());
+        assert!(get_nlist("[1, label:]").is_err());
+        assert!(get_nlist("[1234]").is_err());
+        assert!(get_nlist("[1, 2, 1234]").is_err());
+    }
+
+    #[test]
+    fn parse_test() {
+        assert_eq!(
+            get_test(".test_name [1, 2, 3] [1, 2, 3, 4]"),
+            make_test("test_name", vec![1, 2, 3], vec![1, 2, 3, 4]),
+        );
+        assert_eq!(
+            get_test(".test_name [] []"),
+            make_test("test_name", vec![], vec![]),
+        );
+        assert_eq!(
+            get_test(".test123 [1, 2, 3] [1, 2, 3]"),
+            make_test("test123", vec![1, 2, 3], vec![1, 2, 3]),
+        );
+        assert_eq!(
+            get_test("._test123 [1, 2, 3] [1, 2, 3]"),
+            make_test("_test123", vec![1, 2, 3], vec![1, 2, 3]),
+        );
+
+        assert!(parse_src(".test_name").is_err());
+        assert!(parse_src(".test_name [1, 2, 3]").is_err());
+        assert!(parse_src(".test_name [1, 2, 3] [1, 2, 3] [1, 2, 3]").is_err());
     }
 }
