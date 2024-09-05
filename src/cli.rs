@@ -1,13 +1,13 @@
-use std::io;
+use tabled::{Table, Tabled};
 
-use crate::{
-    assembler,
-    interpreter::{Input, Interpreter, LNCInput, Log, Output},
-    lex, parse,
-};
+use std::{fmt, io};
+
+use crate::interpreter::{Input, Interpreter, LNCInput, Log, Output};
+use crate::vec_io::{QueueInput, StackOutput};
+use crate::LNCTest;
 
 #[derive(Default)]
-pub struct CLIInput {
+struct CLIInput {
     history: Vec<usize>,
 }
 
@@ -36,7 +36,7 @@ impl Input for CLIInput {
 }
 
 #[derive(Default)]
-pub struct CLIOutput {
+struct CLIOutput {
     history: Vec<usize>,
 }
 
@@ -47,7 +47,7 @@ impl Output for CLIOutput {
     }
 }
 
-pub struct CLILogger;
+struct CLILogger;
 
 impl Log for CLILogger {
     fn log(&mut self, msg: String) {
@@ -55,34 +55,45 @@ impl Log for CLILogger {
     }
 }
 
-pub fn run(source: &str) -> Result<(), String> {
-    let mut errors = vec![];
+enum TestResult {
+    Passed,
+    Failed(String),
+}
 
-    let tokens = match lex::tokenize(source) {
-        Ok(toks) => toks,
-        Err((toks, e)) => {
-            errors.push(e);
-            toks
+impl fmt::Display for TestResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Passed => write!(f, "ok"),
+            Self::Failed(msg) => write!(f, "failed: {msg}"),
         }
-    };
-    let parse_info = match parse::parse(&tokens) {
-        Ok(pi) => pi,
-        Err((pi, e)) => {
-            errors.push(e);
-            pi
-        }
-    };
-    let mem = match assembler::assemble(&parse_info) {
-        Ok(m) => m,
-        Err(e) => {
-            errors.push(e);
-            return Err(errors.join("\n"));
-        }
-    };
-
-    if !errors.is_empty() {
-        return Err(errors.join("\n"));
     }
+}
+
+#[derive(Tabled)]
+struct LNCTestInfo {
+    name: String,
+    input: String,
+    expected_output: String,
+    actual_output: String,
+    ins_count: usize,
+    result: TestResult,
+}
+
+impl LNCTestInfo {
+    fn new(test: &LNCTest, actual_output: &[usize], ins_count: usize, result: TestResult) -> Self {
+        Self {
+            name: test.name.to_owned(),
+            input: format!("{:?}", test.inputs),
+            expected_output: format!("{:?}", test.outputs),
+            actual_output: format!("{actual_output:?}"),
+            ins_count,
+            result,
+        }
+    }
+}
+
+pub fn run(source: &str) -> Result<(), String> {
+    let (mem, _) = crate::make_program(source)?;
 
     let mut input = CLIInput::default();
     let mut output = CLIOutput::default();
@@ -96,10 +107,73 @@ pub fn run(source: &str) -> Result<(), String> {
         ins_count += 1;
     }
 
-    println!("--- summary ---");
+    println!("\n--- summary ---");
     println!("instruction count: {ins_count}");
     println!("in:  {:?}", input.history);
     println!("out: {:?}", output.history);
 
     Ok(())
+}
+
+pub fn run_tests(source: &str) -> Result<(), String> {
+    let (mem, tests) = crate::make_program(source)?;
+    let mut results = vec![];
+
+    for test in tests.iter() {
+        results.push(run_test(mem, test)?);
+    }
+
+    println!("\n--- test results ---");
+    println!("{}", Table::new(results).to_string());
+
+    Ok(())
+}
+
+fn run_test(mem: [usize; 100], test: &LNCTest) -> Result<LNCTestInfo, String> {
+    let mut input = QueueInput::new(&test.inputs)?;
+    let mut output = StackOutput::default();
+    let mut logger = CLILogger;
+
+    let mut interpreter = Interpreter::new(mem, &mut input, &mut output, &mut logger);
+    let mut ins_count = 0;
+
+    while !interpreter.is_halted() {
+        match interpreter.step() {
+            Ok(_) => (),
+            Err(e) => {
+                return Ok(LNCTestInfo::new(
+                    test,
+                    &output.stack,
+                    ins_count,
+                    TestResult::Failed(e),
+                ));
+            }
+        }
+        ins_count += 1;
+    }
+
+    if !input.queue.is_empty() {
+        return Ok(LNCTestInfo::new(
+            test,
+            &output.stack,
+            ins_count,
+            TestResult::Failed(format!("unused inputs: {:?}", input.queue)),
+        ));
+    }
+
+    if output.stack != test.outputs {
+        return Ok(LNCTestInfo::new(
+            test,
+            &output.stack,
+            ins_count,
+            TestResult::Failed("incorrect outputs".into()),
+        ));
+    }
+
+    Ok(LNCTestInfo::new(
+        test,
+        &output.stack,
+        ins_count,
+        TestResult::Passed,
+    ))
 }

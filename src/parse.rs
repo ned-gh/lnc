@@ -27,9 +27,9 @@ pub enum Instruction {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct LNCTest {
-    name: String,
-    inputs: Vec<usize>,
-    outputs: Vec<usize>,
+    pub name: String,
+    pub inputs: Vec<usize>,
+    pub outputs: Vec<usize>,
 }
 
 #[derive(Debug)]

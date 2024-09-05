@@ -11,9 +11,12 @@ fn main() {
             hlt
 
         one: dat 1
-        count: dat 0";
+        count: dat 0
 
-    if let Err(e) = cli::run(source) {
+        .test1 [5] [5, 4, 3, 2, 1, 0]
+        .test2 [2] [2, 1, 0, ]";
+
+    if let Err(e) = cli::run_tests(source) {
         println!("{e}");
     }
 }

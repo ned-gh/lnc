@@ -1,3 +1,5 @@
+use std::fmt;
+
 pub trait Output {
     fn send(&mut self, val: usize);
 }
@@ -10,7 +12,20 @@ pub trait Log {
     fn log(&mut self, msg: String);
 }
 
+#[derive(Clone)]
 pub struct LNCInput(usize);
+
+impl fmt::Debug for LNCInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Display for LNCInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl LNCInput {
     pub fn new(num: usize) -> Option<Self> {
