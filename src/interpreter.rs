@@ -54,6 +54,14 @@ pub struct Interpreter<'a, I: Input, O: Output, L: Log> {
     logger: &'a mut L,
 }
 
+pub struct InterpreterState {
+    pub mem: [usize; 100],
+    pub pc: usize,
+    pub acc: usize,
+    pub neg_flag: bool,
+    pub halted: bool,
+}
+
 impl<'a, I: Input, O: Output, L: Log> Interpreter<'a, I, O, L> {
     pub fn new(mem: [usize; 100], input: &'a mut I, output: &'a mut O, logger: &'a mut L) -> Self {
         Self {
@@ -65,6 +73,16 @@ impl<'a, I: Input, O: Output, L: Log> Interpreter<'a, I, O, L> {
             input,
             output,
             logger,
+        }
+    }
+
+    pub fn state(&self) -> InterpreterState {
+        InterpreterState {
+            mem: self.mem,
+            pc: self.pc,
+            acc: self.acc,
+            neg_flag: self.neg_flag,
+            halted: self.halted,
         }
     }
 

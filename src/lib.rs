@@ -6,9 +6,14 @@ mod vec_io;
 
 pub mod cli;
 
-use parse::LNCTest;
+use parse::{LNCTest, ParseInfo};
 
-pub fn make_program(source: &str) -> Result<([usize; 100], Vec<LNCTest>), String> {
+pub struct LNCProgram {
+    pub mem: [usize; 100],
+    pub parse_info: ParseInfo,
+}
+
+pub fn make_program(source: &str) -> Result<LNCProgram, String> {
     let mut errors = vec![];
 
     let tokens = match lex::tokenize(source) {
@@ -36,6 +41,6 @@ pub fn make_program(source: &str) -> Result<([usize; 100], Vec<LNCTest>), String
     if !errors.is_empty() {
         Err(errors.join("\n"))
     } else {
-        Ok((mem, parse_info.tests))
+        Ok(LNCProgram { mem, parse_info })
     }
 }

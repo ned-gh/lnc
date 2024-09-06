@@ -16,7 +16,7 @@ fn main() {
         .test1 [5] [5, 4, 3, 2, 1, 0]
         .test2 [2] [2, 1, 0, ]";
 
-    if let Err(e) = cli::run_tests(source) {
+    if let Err(e) = cli::run_debugger(source) {
         println!("{e}");
     }
 }
