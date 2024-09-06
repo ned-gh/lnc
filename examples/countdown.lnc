@@ -1,0 +1,14 @@
+;
+; An LNC program which counts down from a given number.
+; 
+
+        inp
+loop:   out
+        sub one
+        brp loop
+end:    hlt
+
+one:    dat 1
+
+.count5 [5] [5, 4, 3, 2, 1, 0]
+.count2 [2] [2, 1, 0]

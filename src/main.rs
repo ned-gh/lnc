@@ -1,22 +1,49 @@
+use std::error::Error;
+use std::fs;
+use std::path::PathBuf;
+
+use clap::Parser;
+
 use lnc::cli;
 
-fn main() {
-    let source = "
-        inp
-        loop:
-            out         ; this is a comment
-            sub one
-            sto count
-            brp loop
-            hlt
+#[derive(Parser)]
+struct Args {
+    /// path to .lmn source code file
+    path: PathBuf,
 
-        one: dat 1
-        count: dat 0
+    /// run tests
+    #[arg(short, long)]
+    test: bool,
 
-        .test1 [5] [5, 4, 3, 2, 1, 0]
-        .test2 [2] [2, 1, 0, ]";
+    /// run debugger
+    #[arg(short, long)]
+    debug: bool,
+}
 
-    if let Err(e) = cli::run_debugger(source) {
+fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+
+    let source = fs::read_to_string(args.path)?;
+
+    if args.test {
+        if let Err(e) = cli::run_tests(&source) {
+            println!("{e}");
+        }
+
+        return Ok(());
+    }
+
+    if args.debug {
+        if let Err(e) = cli::run_debugger(&source) {
+            println!("{e}");
+        }
+
+        return Ok(());
+    }
+
+    if let Err(e) = cli::run(&source) {
         println!("{e}");
     }
+
+    Ok(())
 }

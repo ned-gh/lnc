@@ -1,0 +1,44 @@
+;
+; An LNC program to convert a binary number to a decimal one.
+;
+; The first input is the number of bits in the binary number. The following
+; inputs are the bits in order of most significant to least significant.
+;
+; Example:
+;   Suppose we want to convert the binary number 11001111 to decimal.
+;   Since it has 8 digits, our first input is 8. Then, we input the bits from
+;   left to right: 1, 1, 0, 0, 1, 1, 1, 1.
+;   -> in [8, 1, 1, 0, 0, 1, 1, 1, 1]
+;   The output should be 207.
+;
+
+
+input:  inp             ; get number of bits
+        sto num_bits
+
+loop:   lda num
+        add num         ; double num (just like a shift left)
+        sto num
+        inp             ; get next bit
+        add num         ; add the bit to num
+        sto num
+        lda num_bits
+        sub ctr
+        brz end         ; jump to end if we've collected enough bits
+inc:    lda ctr         ; increment the counter
+        add one
+        sto ctr
+        bra loop        ; go back to the start of the loop
+
+end:    lda num
+        out             ; output the decimal number
+        hlt
+
+num_bits:   dat 0       ; stores the number of bits that need to be collected
+ctr:        dat 1       ; counter for how many bits have been collected so far
+num:        dat 0       ; the decimal number
+one:        dat 1       ; the number 1
+
+.zero [1, 0] [0]
+.one [1, 1] [1]
+.twenty [5, 1, 0, 1, 0, 0] [20]
