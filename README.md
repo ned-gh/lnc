@@ -46,11 +46,11 @@ There are two optional flags for `lnc`:
 For example, if you wanted to run the tests for `examples/countdown.lnc`, you
 would use
 ```
-lnc examples/countdown.lnc -t
+$ lnc examples/countdown.lnc -t
 ```
 If you wanted to run it in debugging mode, would use
 ```
-lnc examples/countdown.lnc -d
+$ lnc examples/countdown.lnc -d
 ```
 
 ## Syntax
@@ -61,35 +61,19 @@ line, and the address of that instruction will be 0 + the number of instructions
 before it (i.e. the first instruction has address 0, the second address 1, and
 so on). The supported instructions are:
 
-- `lda xx` (load, `5xx`): copies the value located at address `xx` into the
-  accumulator.
-- `sto xx` (store, `3xx`): writes the value in the accumulator to memory at the
-  address `xx`.
-- `add xx` (add, `1xx`): adds the value located at address `xx` to the
-  accumulator. Note that since the accumulator can only hold numbers 0-999, it
-  is possible for overflow to occur. In the LNC interpreter, addition wraps
-  around back to 0 upon overflow.
-- `sub xx` (subtract, `2xx`): subtracts the value located at address `xx` from
-  the accumulator. While the accumulator cannot hold negative numbers, if the
-  result of the subtraction is below zero then the flag `neg_flag` is set for
-  use with the `brp` instruction. In the LNC interpreter, subtraction will wrap
-  around to 999 upon underflow.
-- `inp` (input, `901`): takes the next input from the input basket and stores it
-  in the accumulator. The input must be an integer in the range 0-999. When
-  running the program normally or with the debug flag, this will prompt input
-  from the user.
-- `out` (output, `902`): copies the value from the accumulator and places it
-  into the output basket.
-- `hlt` (halt, `000`): halts the interpreter.
-- `brz xx` (branch if zero, `7xx`): jumps to the address `xx` if the value in
-  the accumulator is zero.
-- `brp xx` (branch if positive, `8xx`): jumps to the address `xx` if `neg_flag`
-  is not set. `neg_flag` is reset before executing an arithmetic instruction
-  (`add` or `sub`) and is only set when the result of a `sub` instruction is
-  negative.
-- `bra xx` (branch always, `6xx`): jumps to the address `xx`.
-- `dat xxx` (data, `xxx`): puts the value `xxx` in memory at the address of the
-  instruction.
+| Mnemonic | Code | Name | Description |
+| --- | --- | --- | --- |
+| `lda xx` | `5xx` | load | Copies the value located at address `xx` into the accumulator. |
+| `sto xx` | `3xx` | store | Writes the value in the accumulator to memory at the address `xx`. |
+| `add xx` | `1xx` | add | Adds the value located at address `xx` to the accumulator. Note that since the accumulator can only hold numbers 0-999, it is possible for overflow to occur. In the LNC interpreter, addition wraps around back to 0 upon overflow. |
+| `sub xx` | `2xx` | subtraction | Subtracts the value located at address `xx` from the accumulator. While the accumulator cannot hold negative numbers, if the result of the subtraction is below zero then the flag `neg_flag` is set for use with the `brp` instruction. In the LNC interpreter, subtraction will wrap around to 999 upon underflow. |
+| `inp` | `901` | input | Takes the next input from the input basket and stores it in the accumulator. The input must be an integer in the range 0-999. When running the program normally or with the debug flag, this will prompt input from the user. |
+| `out` | `902` | output | Copies the value from the accumulator and places it into the output basket. |
+| `hlt` | `000` | halt | halts the interpreter. |
+| `brz xx` | `7xx` | branch if zero | Jumps to the address `xx` if the value in the accumulator is zero. |
+| `brp xx` | `8xx` | branch if positive | Jumps to the address `xx` if `neg_flag` is not set. `neg_flag` is reset before executing an arithmetic instruction (`add` or `sub`) and is only set when the result of a `sub` instruction is negative. |
+| `bra xx` | `6xx` | branch always | Jumps to the address `xx`. |
+| `dat xxx` | `xxx` | data | Puts the value `xxx` in memory at the address of the instruction. |
 
 ### Labels
 
