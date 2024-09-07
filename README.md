@@ -1,6 +1,5 @@
 # LNC
 
----
 
 ## About
 
@@ -9,7 +8,6 @@ It can be used to run, test, and debug LMC programs. Usage and a description of
 the syntax that LNC understands can be found below. A couple of example LNC
 programs can be found in [examples](./examples).
 
----
 
 ## Building
 
@@ -20,7 +18,6 @@ cargo build --release
 ```
 The binary will be located at `lnc/target/release/lnc`.
 
----
 
 ## Usage
 
