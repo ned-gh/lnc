@@ -195,7 +195,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, (Vec<Token>, String)> {
     let mut errors = vec![];
 
     for (i, line) in source.lines().enumerate() {
-        let lexer = Lexer::new(i, line);
+        let lexer = Lexer::new(i + 1, line);
 
         match lexer.make_tokens() {
             Ok(t) => tokens.extend(t.into_iter()),

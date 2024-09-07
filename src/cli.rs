@@ -3,7 +3,7 @@ use tabled::{builder::Builder, settings::Style, Table, Tabled};
 use std::collections::HashMap;
 use std::{fmt, io, io::Write};
 
-use crate::interpreter::{Input, Interpreter, LNCInput, Log, Output};
+use crate::interpreter::{Input, Interpreter, InterpreterState, LNCInput, Log, Output};
 use crate::vec_io::{QueueInput, StackOutput};
 use crate::LNCTest;
 
@@ -158,77 +158,8 @@ pub fn run_debugger(source: &str) -> Result<(), String> {
         println!("\n--- ins #{ins_count} ---");
         let state = interpreter.state();
 
-        let mut builder = Builder::default();
-        builder.push_record(["pc", "addr", "label", "mnemonic", "mem"]);
-
-        let height = 15;
-
-        let (min, max) = if state.pc < height / 2 {
-            (0, height - 1)
-        } else if state.pc > (99 - height / 2) {
-            (99 - height + 1, 99)
-        } else {
-            (state.pc - height / 2, state.pc + height / 2)
-        };
-
-        for (addr, val) in state
-            .mem
-            .iter()
-            .enumerate()
-            .filter(|(addr, _)| *addr >= min && *addr <= max)
-        {
-            let arrow = if addr == state.pc { ">" } else { "" };
-            let addr_str = format!("{addr:02}");
-            let label = if let Some(l) = addr_to_label.get(&addr) {
-                l
-            } else {
-                ""
-            };
-
-            let first_digit = val / 100;
-            let op = val % 100;
-            let mnemonic = match first_digit {
-                5 => format!("lda {:02}", op),
-                3 => format!("sto {:02}", op),
-                1 => format!("add {:02}", op),
-                2 => format!("sub {:02}", op),
-                9 => match op {
-                    01 => "inp".to_owned(),
-                    02 => "out".to_owned(),
-                    _ => "".to_owned(),
-                },
-                0 => {
-                    if op == 0 {
-                        "hlt".to_owned()
-                    } else {
-                        "".to_owned()
-                    }
-                }
-                7 => format!("brz {:02}", op),
-                8 => format!("brp {:02}", op),
-                6 => format!("bra {:02}", op),
-                _ => "".to_owned(),
-            };
-            let val_str = format!("{:03}", val);
-
-            builder.push_record([arrow, &addr_str, label, &mnemonic, &val_str]);
-        }
-
-        let mem_table = builder.build().with(Style::sharp()).to_string();
-        println!("{mem_table}");
-
-        let mut builder = Builder::default();
-
-        builder.push_record(["pc", "acc", "neg_flag", "halted"]);
-        builder.push_record([
-            state.pc.to_string(),
-            state.acc.to_string(),
-            state.neg_flag.to_string(),
-            state.halted.to_string(),
-        ]);
-
-        let state_table = builder.build().with(Style::sharp()).to_string();
-        println!("{state_table}");
+        println!("{}", make_mem_table(&state, &addr_to_label, 15));
+        println!("{}", make_state_table(&state));
 
         if skip_count == 0 {
             loop {
@@ -277,6 +208,82 @@ pub fn run_debugger(source: &str) -> Result<(), String> {
     println!("{result_table}");
 
     Ok(())
+}
+
+fn make_mem_table(
+    state: &InterpreterState,
+    addr_to_label: &HashMap<usize, String>,
+    num_lines: usize,
+) -> String {
+    let mut builder = Builder::default();
+    builder.push_record(["pc", "addr", "label", "mnemonic", "mem"]);
+
+    let (min, max) = if state.pc < num_lines / 2 {
+        (0, num_lines - 1)
+    } else if state.pc > (99 - num_lines / 2) {
+        (99 - num_lines + 1, 99)
+    } else {
+        (state.pc - num_lines / 2, state.pc + num_lines / 2)
+    };
+
+    for (addr, val) in state
+        .mem
+        .iter()
+        .enumerate()
+        .filter(|(addr, _)| *addr >= min && *addr <= max)
+    {
+        let arrow = if addr == state.pc { ">" } else { "" };
+        let addr_str = format!("{addr:02}");
+        let label = if let Some(l) = addr_to_label.get(&addr) {
+            l
+        } else {
+            ""
+        };
+
+        let first_digit = val / 100;
+        let op = val % 100;
+        let mnemonic = match first_digit {
+            5 => format!("lda {:02}", op),
+            3 => format!("sto {:02}", op),
+            1 => format!("add {:02}", op),
+            2 => format!("sub {:02}", op),
+            9 => match op {
+                01 => "inp".to_owned(),
+                02 => "out".to_owned(),
+                _ => "".to_owned(),
+            },
+            0 => {
+                if op == 0 {
+                    "hlt".to_owned()
+                } else {
+                    "".to_owned()
+                }
+            }
+            7 => format!("brz {:02}", op),
+            8 => format!("brp {:02}", op),
+            6 => format!("bra {:02}", op),
+            _ => "".to_owned(),
+        };
+        let val_str = format!("{:03}", val);
+
+        builder.push_record([arrow, &addr_str, label, &mnemonic, &val_str]);
+    }
+
+    builder.build().with(Style::sharp()).to_string()
+}
+
+fn make_state_table(state: &InterpreterState) -> String {
+    let mut builder = Builder::default();
+
+    builder.push_record(["pc", "acc", "neg_flag", "halted"]);
+    builder.push_record([
+        state.pc.to_string(),
+        state.acc.to_string(),
+        state.neg_flag.to_string(),
+        state.halted.to_string(),
+    ]);
+
+    builder.build().with(Style::sharp()).to_string()
 }
 
 fn run_test(mem: [usize; 100], test: &LNCTest) -> Result<LNCTestInfo, String> {
